@@ -71,7 +71,7 @@ in
           {
             "/EFI/BOOT/BOOT${lib.toUpper efiArch}.EFI".source =
               "${config.systemd.package}/lib/systemd/boot/efi/systemd-boot${efiArch}.efi";
-            "/EFI/systemd/systemd-bootx64.efi".source =
+            "/EFI/systemd/systemd-boot${efiArch}.efi".source =
               "${config.systemd.package}/lib/systemd/boot/efi/systemd-boot${efiArch}.efi";
             "/EFI/Linux/${config.system.boot.loader.ukiFile}".source =
               "${config.system.build.uki}/${config.system.boot.loader.ukiFile}";
