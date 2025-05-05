@@ -1,4 +1,4 @@
-{module, variant}:
+{module, variant, efiBoot ? true, extraTestScript ? ""}:
 { lib, ... }:
 {
   name = "test-image-boot";
@@ -11,13 +11,7 @@
     config.virtualisation = {
       directBoot.enable = false;
       mountHostNixStore = false;
-      useEFIBoot = true;
-      fileSystems = lib.mkForce {
-        "/" = {
-          device = "/dev/disk/by-partlabel/root";
-          fsType = "ext4";
-        };
-      };
+      useEFIBoot = efiBoot;
     };
   };
   testScript =
@@ -51,8 +45,11 @@
       #assert 'IMAGE_ID="nixos"' in os_release
       #assert 'IMAGE_VERSION="25.05test"' in os_release
 
-
+      ${lib.optionalString efiBoot ''
       bootctl_status = machine.succeed("bootctl status")
       assert "Boot Loader Specification Type #2 (.efi)" in bootctl_status
+
+      ${extraTestScript}
+      ''}
     '';
 }

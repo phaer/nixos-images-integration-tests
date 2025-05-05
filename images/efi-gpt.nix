@@ -13,7 +13,7 @@
   ...
 }:
 let
-  rootPartitionLabel = "root";
+  rootPartitionLabel = "nixos";
 
   closureInfo = pkgs.closureInfo {
     rootPaths = [ config.system.build.toplevel ];
