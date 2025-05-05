@@ -5,7 +5,7 @@
 }:
 let
   inherit (pkgs) pkgsLinux;
-  inherit (pkgs.lib) listToAttrs map nameValuePair;
+  inherit (pkgs.lib) listToAttrs map attrNames nameValuePair;
 
   module = ./host.nix;
   nixos = pkgsLinux.nixos {
@@ -23,10 +23,7 @@ let
           inherit module variant;
         }))
 
-      ) [
-        "repart-efi-gpt"
-        "qemu-efi"
-      ]);
+      ) (attrNames nixos.images));
 in
   {
     inherit pkgs pkgsLinux nixos tests images;
