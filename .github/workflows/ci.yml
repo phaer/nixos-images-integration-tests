@@ -100,8 +100,15 @@ jobs:
            variants: ${{ matrix.variants }}
         run: |
           nix-build -A images.$variants
-          filePath="$(realpath result)/$(nix-instantiate --eval  --json --expr '(import ./. {}).nixos.images.$variants.passthru.filePath' | jq -r)"
+          filePath=$(realpath result)/$(nix-instantiate --eval  --json --expr "(import ./. {}).nixos.images.$variants.passthru.filePath" | jq -r)
           echo "filePath=$filePath" | tee -a "$GITHUB_OUTPUT"
+
+      - id: test-images
+        name: Test images
+        env:
+           variants: ${{ matrix.variants }}
+        run: |
+          nix-build -A tests.boot-$variants
 
       - name: Upload
         uses: actions/upload-artifact@v4
