@@ -69,6 +69,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: images
     strategy:
+      fail-fast: false
       matrix:
         variants: ${{ fromJSON(needs.images.outputs.variants) }}
     permissions:
