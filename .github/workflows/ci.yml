@@ -59,9 +59,9 @@ jobs:
           echo "found $(echo $variants | jq 'length') image variants:"
           echo "variants=$(echo $variants | jq -cr '.')" | tee -a "$GITHUB_OUTPUT"
 
-      - name: Build toplevel to warm up cache
-        run: |
-          nix-build . -A nixos.toplevel
+      #- name: Build toplevel to warm up cache
+      #  run: |
+      #    nix-build . -A nixos.toplevel
 
 
   build:
