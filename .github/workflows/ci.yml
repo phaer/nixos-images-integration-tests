@@ -46,7 +46,7 @@ jobs:
           # do purge caches
           purge: true
           # purge all versions of the cache
-          purge-prefixes: build-${{ runner.os }}-
+          purge-prefixes: variants-${{ runner.os }}-
           # created more than 0 seconds ago relative to the start of the `Post Restore` phase
           purge-created: 0
           # except the version with the `primary-key`, if it exists
