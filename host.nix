@@ -2,7 +2,7 @@
   imports = [ "${modulesPath}/profiles/minimal.nix" ];
   config = {
     system.stateVersion = "25.05";
-    virtualisation.diskSize = 1024 * 2;
+    virtualisation.diskSize = 1024 * 3;
 
     # image setting collides with
     # nixpkgs/nixos/lib/testing/network.nix during testing
