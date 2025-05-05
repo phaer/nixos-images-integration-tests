@@ -1,0 +1,98 @@
+name: Nix CI
+on:
+  push:
+    # don't run on tags, run on commits
+    # https://github.com/orgs/community/discussions/25615
+    tags-ignore:
+      - "**"
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: 0 0 * * *
+  workflow_dispatch:
+
+env:
+  pin_nixpkgs: nix registry pin nixpkgs github:NixOS/nixpkgs/02032da4af073d0f6110540c8677f16d4be0117f
+  # required for gh
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  nix_conf: |
+    substituters = https://cache.nixos.org/
+    trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+    keep-env-derivations = true
+    keep-outputs = true
+
+jobs:
+  images:
+    name: list image variants
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    outputs:
+      variants: ${{ steps.get-variants.outputs.variants }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: nixbuild/nix-quick-install-action@v30
+        with:
+          nix_conf: ${{ env.nix_conf }}
+
+      - name: Restore and save Nix store
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: variants-${{ runner.os }}-${{ hashFiles('**/*.nix', 'npins/sources.json') }}
+          # do purge caches
+          purge: true
+          # purge all versions of the cache
+          purge-prefixes: build-${{ runner.os }}-
+          # created more than 0 seconds ago relative to the start of the `Post Restore` phase
+          purge-created: 0
+          # except the version with the `primary-key`, if it exists
+          purge-primary-key: never
+
+      - id: get-variants
+        name: Get Image variants
+        run: |
+          variants="$(nix-instantiate --eval  --json --expr 'builtins.attrNames (import ./. {}).nixos.images' | jq '.[:5]')" # TODO test with just the first 5
+          echo "found $(echo $variants | jq 'length') image variants:"
+          echo "variants=$(echo $variants | jq -cr '.')" | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    name: Build images
+    runs-on: ubuntu-24.04
+    needs: images
+    strategy:
+      matrix:
+        variants: ${{ fromJSON(needs.images.outputs.variants) }}
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: nixbuild/nix-quick-install-action@v30
+        with:
+          nix_conf: ${{ env.nix_conf }}
+
+      - name: Restore and save Nix store
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: build-${{ matrix.variants }}-${{ hashFiles('**/*.nix', 'npins/sources.json') }}
+          # do purge caches
+          purge: true
+          # purge all versions of the cache
+          purge-prefixes: build-${{ matrix.variants }}-
+          # created more than 0 seconds ago relative to the start of the `Post Restore` phase
+          purge-created: 0
+          # except the version with the `primary-key`, if it exists
+          purge-primary-key: never
+
+      - name: Build images
+        env:
+           variants: ${{ matrix.variants }}
+        run: |
+          nix-build -A images.$variants
+
+
