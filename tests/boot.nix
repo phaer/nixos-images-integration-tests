@@ -1,13 +1,11 @@
 {module, variant, efiBoot ? true, extraTestScript ? ""}:
-{ lib, ... }:
+{ lib, pkgs, ... }:
 {
   name = "test-image-boot";
 
   meta.maintainers = with lib.maintainers; [ phaer ];
 
   nodes.machine = {
-    imports = [module];
-
     config.virtualisation = {
       directBoot.enable = false;
       mountHostNixStore = false;
@@ -17,7 +15,15 @@
   testScript =
     { nodes, ... }:
     let
-      image = nodes.machine.system.build.images.${variant};
+      # We want the image to be built without any of the testing frameworks options
+      # interfering. So we are building a "vanilla" closure for it, while using the
+      # testing framework for the testScript and qemu startup.
+      nixos =
+        (pkgs.nixos {
+          imports = [ module ];
+          config.nixpkgs.hostPlatform = pkgs.system;
+        });
+      image = nixos.config.system.build.images.${variant};
     in
     ''
       import os
