@@ -15,6 +15,8 @@ let
 
   inherit (nixos.config.system.build) images;
 
+  ovmf = pkgs.OVMF.fd;
+
   tests =
     listToAttrs (
       map (variant: nameValuePair
@@ -24,7 +26,12 @@ let
         }))
 
       ) (attrNames nixos.images));
+  shell = pkgs.mkShell {
+    packages = [
+      pkgs.qemu
+    ];
+  };
 in
   {
-    inherit pkgs pkgsLinux nixos tests images;
+    inherit pkgs pkgsLinux nixos tests images shell ovmf;
   }
