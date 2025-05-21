@@ -2,13 +2,14 @@
   imports = [ "${modulesPath}/profiles/minimal.nix" ];
   config = {
     system.stateVersion = "25.05";
-    virtualisation.diskSize = 1024 * 3;
+    virtualisation.diskSize = 1024 * 4;
+    boot.kernelParams = [ "console=ttyS0,115200n8" ];
+    services.getty.autologinUser = "root";
 
     # image setting collides with nixpkgs/nixos/lib/testing/network.nix during testing
     image.modules.amazon.config = {
       ec2.efi = true;
       networking.hostName = lib.mkForce "";
-      systemd.services."serial-getty@ttyS0".enable = lib.mkForce true;
     };
 
     # image setting collides with nixpkgs/nixos/lib/testing/network.nix during testing
