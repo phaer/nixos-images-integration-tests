@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+import os
+import sys
+import logging
+import argparse
+import subprocess
+import json
+import shutil
+import time
+from tempfile import NamedTemporaryFile
+from pathlib import Path
+
+import pexpect
+
+
+logger = logging.getLogger("run_qemu")
+logging.basicConfig(level=logging.DEBUG)
+
+
+arg_parser = argparse.ArgumentParser()
+arg_parser.add_argument("image_name")
+arg_parser.add_argument("--efi-boot", action="store_true", default=False)
+
+
+# Use nom-build if available, else nix-build
+NIX_BUILD = shutil.which("nom-build") or shutil.which("nix-build")
+if not NIX_BUILD:
+    raise Exception("Found neither nom-build nor nix-build")
+logger.debug(f"Using {NIX_BUILD}")
+
+
+def _run(*args):
+    logger.debug(f"executing: {" ".join(args)}")
+    try:
+        return subprocess.run(args, check = True, encoding="utf-8", capture_output=True).stdout.strip()
+    except subprocess.CalledProcessError as e:
+        logger.fatal(f"command failed: {e.stderr}")
+        sys.exit(1)
+
+
+def get_file_path(image_name):
+    stdout = _run(
+        "nix-instantiate",
+        "--eval", "--json", "--expr",
+        f"(import ./. {{}}).nixos.images.{image_name}.passthru.filePath"
+    )
+    return json.loads(stdout)
+
+
+def prepare_efi_boot():
+    logger.info("preparing efi boot")
+    ovmf_firmware = Path(_run(NIX_BUILD, "-A", "ovmf")) / "FV/OVMF_CODE.fd"
+    efi_vars = Path(os.getenv("NIX_EFI_VARS", "nixos-efi-vars.fd"))
+    if not efi_vars.exists():
+        logger.debug(f"creating {efi_vars}")
+        with open(efi_vars, "wb") as f:
+            f.truncate(4096)
+    return [
+        "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={ovmf_firmware}",
+        "-drive", f"if=pflash,format=raw,file={efi_vars}"
+    ]
+
+
+def main():
+    args = arg_parser.parse_args()
+    logger.info(args)
+
+    outputs = Path("outputs")
+    outputs.mkdir(exist_ok=True)
+
+    file_path = get_file_path(args.image_name)
+    readable_image = outputs / args.image_name / file_path
+
+    # Build image if it isn't cached yet
+    if readable_image.exists():
+        logger.info(f"found {args.image_name} at {readable_image}.")
+    else:
+        logger.info(f"image {args.image_name} not found, building...")
+        stdout = _run(NIX_BUILD, "-A", f"images.{args.image_name}", "--out-link", outputs / args.image_name,)
+        logger.info(f"built {stdout}")
+
+    with NamedTemporaryFile(suffix=f"{args.image_name}-{file_path}") as writable_image:
+        logger.info(f"Copying {readable_image} to {writable_image.name} to make it writable.")
+        shutil.copyfile(readable_image, writable_image.name)
+
+        efi_boot = prepare_efi_boot() if args.efi_boot else []
+
+        qemu_net_opts = os.getenv("QEMU_NET_OPTS", "")
+        args = [
+            "qemu-system-x86_64",
+            "-machine", "type=q35,accel=kvm",
+            "-cpu", "host",
+            "-m", "2048",
+            "-device", "virtio-rng-pci",
+            "-device", "vhost-vsock-pci,guest-cid=3",
+            "-net", "nic,netdev=user.0,model=virtio", "-netdev", f"user,id=user.0,{qemu_net_opts}",
+            "-device", "virtio-keyboard",
+            "-usb",
+            "-device", "usb-tablet,bus=usb-bus.0",
+            "-nographic",
+            #"-chardev", "socket,id=char0,path=./monitor.sock,server=on,wait=off",
+            #"-mon", "chardev=char0",
+            #"-chardev", "socket,id=char1,path=./serial.sock,server=on,wait=off",
+            #"-serial", "chardev:char1",
+            *efi_boot,
+            "-drive", f"file={writable_image.name}"
+        ]
+        logger.debug(" ".join(args))
+        qemu = pexpect.spawn(" ".join(args))
+        logfile = open('log.txt', "wb")
+        qemu.logfile = logfile
+
+        prompt = r"\x1b\[1;31m\[\x1b\]0;root@nixos: ~\x07root@nixos:~\]#\x1b\[0m.*"
+
+        #qemu.expect_exact("nixos login:")
+        #logger.debug("reached login")
+
+        qemu.expect_exact('[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mMulti-User System\x1b[0m.\r\r\r\n')
+        logger.debug("reached multi-user-system")
+        time.sleep(3)
+
+        qemu.sendline()
+        qemu.expect(prompt)
+        logger.debug("found prompt, running systemctl status")
+
+        qemu.sendline("systemctl status | awk '/^\\W+State: / {print $2}'")
+        qemu.expect(prompt)
+        state = qemu.before.decode("utf-8").split("\r\n")[1].strip()
+        qemu.sendcontrol("A")
+        qemu.send("x")
+
+        if state == "running":
+            logger.info("vm booted successfully")
+        else:
+            logger.info(f"vm did not boot successfully, state: {state}")
+            sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
