@@ -43,11 +43,11 @@ def _run(*args):
         sys.exit(1)
 
 
-def get_file_path(image_name):
+def get_image_info(image_name):
     stdout = _run(
         "nix-instantiate",
-        "--eval", "--json", "--expr",
-        f"(import ./. {{}}).nixos.images.{image_name}.passthru.filePath"
+        "--eval", "--json", "--expr", "--strict",
+        f"let i = (import ./. {{}}).nixos.images.{image_name}; in {{ inherit (i.passthru) filePath; storePath = i.outPath; }}" # noqa
     )
     return json.loads(stdout)
 
@@ -72,11 +72,11 @@ def main():
     args = arg_parser.parse_args()
     logger.info(args)
 
-    outputs = Path("outputs")
-    outputs.mkdir(exist_ok=True)
-
-    file_path = get_file_path(args.image_name)
-    readable_image = outputs / args.image_name / file_path
+    info = get_image_info(args.image_name)
+    print("info", info)
+    file_path = Path(info["filePath"])
+    store_path = Path(info["storePath"])
+    readable_image = store_path / file_path
 
     # Build image if it isn't cached yet
     if readable_image.exists():
@@ -85,8 +85,7 @@ def main():
         logger.info(f"image {args.image_name} not found, building...")
         stdout = _run(
             NIX_BUILD,
-            "-A", f"images.{args.image_name}",
-            "--out-link", str(outputs / args.image_name))
+            "-A", f"images.{args.image_name}")
         logger.info(f"built {stdout}")
 
     suffix = f"{args.image_name}-{file_path}"
@@ -113,14 +112,14 @@ def main():
             "-drive", f"file={writable_image.name}"
         ]
         logger.debug(" ".join(args))
-        qemu = pexpect.spawn(" ".join(args))
-        logfile = open('log.txt', "wb")
+        qemu = pexpect.spawnu(" ".join(args))
+        logfile = open('log.txt', "w")
         qemu.logfile = logfile
 
         prompt = r"\x1b\[1;31m\[\x1b\]0;root@nixos: ~\x07root@nixos:~\]#\x1b\[0m.*" # noqa
 
-        qemu.expect_exact('Reached target \x1b[0;1;39mMulti-User System\x1b[0m.') # noqa
-        logger.debug("reached multi-user-system")
+        qemu.expect_exact("Welcome to NixOS")
+        logger.debug("reached welcome")
         time.sleep(3)
 
         qemu.sendline()
@@ -129,15 +128,18 @@ def main():
 
         # Search the output of `systemctl status` for the "State" field
         qemu.sendline("systemctl status|cat")
+        qemu.expect(prompt+"systemctl status|cat")
         qemu.expect(prompt)
         state_re = re.compile(r'\W+State:(.+)')
         state = None
-        for line in qemu.before.decode("utf8").split("\r\r\n"):
+        for line in qemu.before.split("\r\r\n"):
             if m := state_re.match(line):
                 state = m.group(1).strip()
+                logger.debug(f"found state: {state}")
                 break
 
         # Stop qemu by sending Ctrl-A + x
+        logger.debug("stopping vm")
         qemu.sendcontrol("A")
         qemu.send("x")
 
