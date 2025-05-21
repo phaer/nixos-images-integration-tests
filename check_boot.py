@@ -90,7 +90,7 @@ def main():
     if readable_image.exists():
         logger.info(f"found {args.image_name} at {readable_image}.")
     else:
-        logger.info(f"image {args.image_name} not found at {readable_image}, building...")
+        logger.info(f"image {args.image_name} not found at {readable_image}, building...") # noqa
         stdout = _run(
             NIX_BUILD,
             "-A", f"images.{args.image_name}")
