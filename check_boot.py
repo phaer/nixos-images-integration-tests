@@ -19,7 +19,6 @@ logging.basicConfig(level=logging.DEBUG)
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument("image_name")
-arg_parser.add_argument("--efi-boot", action="store_true", default=False)
 
 
 # Use nom-build if available, else nix-build
@@ -47,8 +46,17 @@ def get_image_info(image_name):
     stdout = _run(
         "nix-instantiate",
         "--eval", "--json", "--expr", "--strict",
-        f"let i = (import ./. {{}}).nixos.images.{image_name}; in {{ inherit (i.passthru) filePath; storePath = i.outPath; }}" # noqa
-    )
+        f"""
+        let
+          image = (import ./. {{}}).nixos.images.{image_name};
+          inherit (image.passthru) filePath config;
+          inherit (config.boot.loader) systemd-boot grub;
+          useEFI = systemd-boot.enable || (grub.enable && grub.efiSupport);
+          storePath = image.outPath;
+        in {{
+          inherit filePath useEFI storePath;
+        }}
+        """)
     return json.loads(stdout)
 
 
@@ -82,7 +90,7 @@ def main():
     if readable_image.exists():
         logger.info(f"found {args.image_name} at {readable_image}.")
     else:
-        logger.info(f"image {args.image_name} not found, building...")
+        logger.info(f"image {args.image_name} not found at {readable_image}, building...")
         stdout = _run(
             NIX_BUILD,
             "-A", f"images.{args.image_name}")
@@ -93,7 +101,7 @@ def main():
         logger.info(f"Copying {readable_image} to {writable_image.name} to make it writable.")  # noqa
         shutil.copyfile(readable_image, writable_image.name)
 
-        efi_boot = prepare_efi_boot() if args.efi_boot else []
+        efi_boot = prepare_efi_boot() if info.get("useEFI") else []
 
         qemu_net_opts = os.getenv("QEMU_NET_OPTS", "")
         args = [
