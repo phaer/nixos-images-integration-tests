@@ -16,6 +16,13 @@ let
   inherit (nixos.config.system.build) images;
 
   ovmf = pkgs.OVMF.fd;
+  python = pkgs.python3.withPackages (ps: [ps.pexpect]);
+  qemu = pkgs.qemu;
+  check-boot = pkgs.writers.writePython3
+    "check_boot"
+    { libraries = [ pkgs.python3Packages.pexpect ]; }
+    (builtins.readFile ./check_boot.py)
+    ;
 
   tests =
     listToAttrs (
@@ -28,10 +35,11 @@ let
       ) (attrNames nixos.images));
   shell = pkgs.mkShell {
     packages = [
-      pkgs.qemu
+      qemu
+      python
     ];
   };
 in
   {
-    inherit pkgs pkgsLinux nixos tests images shell ovmf;
+    inherit pkgs pkgsLinux nixos tests images shell ovmf qemu python check-boot;
   }

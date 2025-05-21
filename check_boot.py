@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 import os
 import sys
+import re
 import logging
 import argparse
 import subprocess
@@ -32,7 +32,12 @@ logger.debug(f"Using {NIX_BUILD}")
 def _run(*args):
     logger.debug(f"executing: {" ".join(args)}")
     try:
-        return subprocess.run(args, check = True, encoding="utf-8", capture_output=True).stdout.strip()
+        return subprocess.run(
+            args,
+            check=True,
+            encoding="utf-8",
+            capture_output=True
+        ).stdout.strip()
     except subprocess.CalledProcessError as e:
         logger.fatal(f"command failed: {e.stderr}")
         sys.exit(1)
@@ -56,8 +61,10 @@ def prepare_efi_boot():
         with open(efi_vars, "wb") as f:
             f.truncate(4096)
     return [
-        "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={ovmf_firmware}",
-        "-drive", f"if=pflash,format=raw,file={efi_vars}"
+        "-drive",
+        f"if=pflash,format=raw,unit=0,readonly=on,file={ovmf_firmware}",
+        "-drive",
+        f"if=pflash,format=raw,file={efi_vars}"
     ]
 
 
@@ -76,11 +83,15 @@ def main():
         logger.info(f"found {args.image_name} at {readable_image}.")
     else:
         logger.info(f"image {args.image_name} not found, building...")
-        stdout = _run(NIX_BUILD, "-A", f"images.{args.image_name}", "--out-link", outputs / args.image_name,)
+        stdout = _run(
+            NIX_BUILD,
+            "-A", f"images.{args.image_name}",
+            "--out-link", str(outputs / args.image_name))
         logger.info(f"built {stdout}")
 
-    with NamedTemporaryFile(suffix=f"{args.image_name}-{file_path}") as writable_image:
-        logger.info(f"Copying {readable_image} to {writable_image.name} to make it writable.")
+    suffix = f"{args.image_name}-{file_path}"
+    with NamedTemporaryFile(suffix=suffix) as writable_image:
+        logger.info(f"Copying {readable_image} to {writable_image.name} to make it writable.")  # noqa
         shutil.copyfile(readable_image, writable_image.name)
 
         efi_boot = prepare_efi_boot() if args.efi_boot else []
@@ -93,15 +104,11 @@ def main():
             "-m", "2048",
             "-device", "virtio-rng-pci",
             "-device", "vhost-vsock-pci,guest-cid=3",
-            "-net", "nic,netdev=user.0,model=virtio", "-netdev", f"user,id=user.0,{qemu_net_opts}",
+            "-net", "nic,netdev=user.0,model=virtio", "-netdev", f"user,id=user.0,{qemu_net_opts}", # noqa
             "-device", "virtio-keyboard",
             "-usb",
             "-device", "usb-tablet,bus=usb-bus.0",
             "-nographic",
-            #"-chardev", "socket,id=char0,path=./monitor.sock,server=on,wait=off",
-            #"-mon", "chardev=char0",
-            #"-chardev", "socket,id=char1,path=./serial.sock,server=on,wait=off",
-            #"-serial", "chardev:char1",
             *efi_boot,
             "-drive", f"file={writable_image.name}"
         ]
@@ -110,12 +117,9 @@ def main():
         logfile = open('log.txt', "wb")
         qemu.logfile = logfile
 
-        prompt = r"\x1b\[1;31m\[\x1b\]0;root@nixos: ~\x07root@nixos:~\]#\x1b\[0m.*"
+        prompt = r"\x1b\[1;31m\[\x1b\]0;root@nixos: ~\x07root@nixos:~\]#\x1b\[0m.*" # noqa
 
-        #qemu.expect_exact("nixos login:")
-        #logger.debug("reached login")
-
-        qemu.expect_exact('[\x1b[0;32m  OK  \x1b[0m] Reached target \x1b[0;1;39mMulti-User System\x1b[0m.\r\r\r\n')
+        qemu.expect_exact('Reached target \x1b[0;1;39mMulti-User System\x1b[0m.') # noqa
         logger.debug("reached multi-user-system")
         time.sleep(3)
 
@@ -123,9 +127,17 @@ def main():
         qemu.expect(prompt)
         logger.debug("found prompt, running systemctl status")
 
-        qemu.sendline("systemctl status | awk '/^\\W+State: / {print $2}'")
+        # Search the output of `systemctl status` for the "State" field
+        qemu.sendline("systemctl status|cat")
         qemu.expect(prompt)
-        state = qemu.before.decode("utf-8").split("\r\n")[1].strip()
+        state_re = re.compile(r'\W+State:(.+)')
+        state = None
+        for line in qemu.before.decode("utf8").split("\r\r\n"):
+            if m := state_re.match(line):
+                state = m.group(1).strip()
+                break
+
+        # Stop qemu by sending Ctrl-A + x
         qemu.sendcontrol("A")
         qemu.send("x")
 

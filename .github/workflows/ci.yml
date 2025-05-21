@@ -109,7 +109,8 @@ jobs:
         env:
            variants: ${{ matrix.variants }}
         run: |
-          nix-build -A tests.boot-$variants
+          check-boot="$(nix-build -A check-boot)"
+          $check-boot ${{matrix.variants}}
 
       - name: Upload
         uses: actions/upload-artifact@v4
