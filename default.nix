@@ -29,7 +29,6 @@ let
     packages = [
       qemu
       python
-      check-boot
     ];
   };
 in
