@@ -110,7 +110,6 @@ def main():
             "-cpu", "host",
             "-m", "2048",
             "-device", "virtio-rng-pci",
-            "-device", "vhost-vsock-pci,guest-cid=3",
             "-net", "nic,netdev=user.0,model=virtio", "-netdev", f"user,id=user.0,{qemu_net_opts}", # noqa
             "-device", "virtio-keyboard",
             "-usb",
