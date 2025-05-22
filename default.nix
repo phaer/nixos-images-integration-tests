@@ -18,7 +18,10 @@ let
   qemu = pkgs.qemu;
   check-boot = pkgs.writers.writePython3
     "check_boot"
-    { libraries = [ pkgs.python3Packages.pexpect ]; }
+    {
+      libraries = [ pkgs.python3Packages.pexpect ];
+      makeWrapperArgs = [ "--prefix" "PATH" ":" (pkgs.lib.makeBinPath [ qemu ]) ];
+    }
     (builtins.readFile ./check_boot.py)
     ;
 
@@ -26,6 +29,7 @@ let
     packages = [
       qemu
       python
+      check-boot
     ];
   };
 in
