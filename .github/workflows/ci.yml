@@ -11,6 +11,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: cachix/install-nix-action@v25
+      with:
+        extra_nix_config: |
+          experimental-features = flakes nix-command auto-allocate-uids configurable-impure-env
     - id: get-variants
       name: Get Image variants
       run: |
@@ -32,6 +35,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: cachix/install-nix-action@v25
+      with:
+        extra_nix_config: |
+          experimental-features = flakes nix-command auto-allocate-uids impure-env
     - uses: cachix/cachix-action@v14
       with:
         name: nixos-images-integration-tests
