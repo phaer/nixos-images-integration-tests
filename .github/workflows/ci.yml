@@ -57,7 +57,7 @@ jobs:
       env:
          variants: ${{ matrix.variants }}
       run: |
-        check-boot="$(nix-build -A check-boot)"
+        export check-boot="$(nix-build -A check-boot)"
         $check-boot ${{matrix.variants}}
 
     - name: Upload
