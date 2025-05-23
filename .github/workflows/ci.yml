@@ -66,11 +66,19 @@ jobs:
         export check_boot="$(nix-build -A check-boot)"
         $check_boot ${{matrix.variants}}
 
-    - name: Upload
+    - name: Upload test log
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.variants }}
-        path: ${{ steps.build-images.outputs.filePath }}
-        if-no-files-found: error
-        compression-level: 0
-        overwrite: true
+        name: ${{matrix.variants}}-log.txt
+        path: log.txt
+        if-no-files-found: ignore
+
+    #- name: Upload
+    #  uses: actions/upload-artifact@v4
+    #  with:
+    #    name: ${{ matrix.variants }}
+    #    path: ${{ steps.build-images.outputs.filePath }}
+    #    if-no-files-found: error
+    #    compression-level: 0
+    #    overwrite: true
