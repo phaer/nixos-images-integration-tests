@@ -28,14 +28,25 @@ if not NIX_BUILD:
 logger.debug(f"Using {NIX_BUILD}")
 
 
-def _run(*args):
+def _nix_build(attr):
+    return _run(
+        NIX_BUILD, "-A", attr,
+        capture_output=False,
+        stdout=subprocess.PIPE,
+        # stdout should still go to the current stdout
+    )
+
+
+def _run(*args, **settings):
     logger.debug(f"executing: {" ".join(args)}")
+    kwargs = dict(
+        check=True,
+        encoding="utf-8",
+        capture_output=True)
+    kwargs.update(settings)
     try:
         return subprocess.run(
-            args,
-            check=True,
-            encoding="utf-8",
-            capture_output=True
+            args, **kwargs
         ).stdout.strip()
     except subprocess.CalledProcessError as e:
         logger.fatal(f"command failed: {e.stderr}")
@@ -62,7 +73,7 @@ def get_image_info(image_name):
 
 def prepare_efi_boot():
     logger.info("preparing efi boot")
-    ovmf_firmware = Path(_run(NIX_BUILD, "-A", "ovmf")) / "FV/OVMF_CODE.fd"
+    ovmf_firmware = Path(_nix_build("ovmf")) / "FV/OVMF_CODE.fd"
     efi_vars = Path(os.getenv("NIX_EFI_VARS", "nixos-efi-vars.fd"))
     if not efi_vars.exists():
         logger.debug(f"creating {efi_vars}")
@@ -113,9 +124,7 @@ def main():
         logger.info(f"found {args.image_name} at {readable_image}.")
     else:
         logger.info(f"image {args.image_name} not found at {readable_image}, building...") # noqa
-        stdout = _run(
-            NIX_BUILD,
-            "-A", f"images.{args.image_name}")
+        stdout = _nix_build(f"images.{args.image_name}")
         logger.info(f"built {stdout}")
 
     suffix = f"{args.image_name}-{file_path.name}"
