@@ -76,6 +76,28 @@ def prepare_efi_boot():
     ]
 
 
+prompt = r"\x1b\[1;31m\[\x1b\]0;root@nixos: ~\x07root@nixos:~\]#\x1b\[0m.*" # noqa
+
+
+def expect_shell(qemu, command):
+    qemu.sendline(command)
+    qemu.expect(prompt+command)
+    qemu.expect(prompt)
+    return qemu.before
+
+
+def expect_systemctl_status(qemu):
+    full_status = expect_shell(qemu, "systemctl status|cat")
+    state_re = re.compile(r'\W+State:(.+)')
+    state = None
+    for line in full_status.split("\r\r\n"):
+        if m := state_re.match(line):
+            state = m.group(1).strip()
+            logger.debug(f"found state: {state}")
+            break
+    return state
+
+
 def main():
     args = arg_parser.parse_args()
     logger.info(args)
@@ -96,7 +118,7 @@ def main():
             "-A", f"images.{args.image_name}")
         logger.info(f"built {stdout}")
 
-    suffix = f"{args.image_name}-{file_path}"
+    suffix = f"{args.image_name}-{file_path.name}"
     with NamedTemporaryFile(suffix=suffix) as writable_image:
         logger.info(f"Copying {readable_image} to {writable_image.name} to make it writable.")  # noqa
         shutil.copyfile(readable_image, writable_image.name)
@@ -123,38 +145,34 @@ def main():
         logfile = open('log.txt', "w")
         qemu.logfile = logfile
 
-        prompt = r"\x1b\[1;31m\[\x1b\]0;root@nixos: ~\x07root@nixos:~\]#\x1b\[0m.*" # noqa
-
-        qemu.expect_exact("Welcome to NixOS")
-        logger.debug("reached welcome")
-        time.sleep(3)
+        # qemu.expect_exact("Welcome to NixOS")
+        # logger.debug("reached welcome")
 
         qemu.sendline()
         qemu.expect(prompt)
         logger.debug("found prompt, running systemctl status")
 
         # Search the output of `systemctl status` for the "State" field
-        qemu.sendline("systemctl status|cat")
-        qemu.expect(prompt+"systemctl status|cat")
-        qemu.expect(prompt)
-        state_re = re.compile(r'\W+State:(.+)')
-        state = None
-        for line in qemu.before.split("\r\r\n"):
-            if m := state_re.match(line):
-                state = m.group(1).strip()
-                logger.debug(f"found state: {state}")
+        retries = 0
+        while retries < 10:
+            retries += 1
+            state = expect_systemctl_status(qemu)
+            if state != "starting":
                 break
+            time.sleep(1 * retries)
+
+        if state == "running":
+            logger.info("vm booted successfully")
+        else:
+            units = logger.info(expect_shell(qemu, "systemctl|cat"))
+            logger.info(f"vm did not boot successfully, state: {state}")
+            logger.info(f"units: {units}")
+            sys.exit(1)
 
         # Stop qemu by sending Ctrl-A + x
         logger.debug("stopping vm")
         qemu.sendcontrol("A")
         qemu.send("x")
-
-        if state == "running":
-            logger.info("vm booted successfully")
-        else:
-            logger.info(f"vm did not boot successfully, state: {state}")
-            sys.exit(1)
 
 
 if __name__ == '__main__':
