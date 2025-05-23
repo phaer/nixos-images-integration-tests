@@ -19,6 +19,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument("image_name")
+arg_parser.add_argument(
+    "--interactive",
+    help="start an interactive vm for debugging",
+    action="store_true")
 
 
 # Use nom-build if available, else nix-build
@@ -109,6 +113,43 @@ def expect_systemctl_status(qemu):
     return state
 
 
+def expect_booted(qemu_command):
+    "spawn the qemu vm with pexpect, check systemctl status, shutdown"
+    logger.debug(" ".join(qemu_command))
+    qemu = pexpect.spawnu(" ".join(qemu_command))
+    logfile = open('log.txt', "w")
+    qemu.logfile = logfile
+
+    # qemu.expect_exact("Welcome to NixOS")
+    # logger.debug("reached welcome")
+
+    qemu.sendline()
+    qemu.expect(prompt)
+    logger.debug("found prompt, running systemctl status")
+
+    # Search the output of `systemctl status` for the "State" field
+    retries = 0
+    while retries < 10:
+        retries += 1
+        state = expect_systemctl_status(qemu)
+        if state != "starting":
+            break
+        time.sleep(1 * retries)
+
+    if state == "running":
+        logger.info("vm booted successfully")
+    else:
+        units = logger.info(expect_shell(qemu, "systemctl|cat"))
+        logger.info(f"vm did not boot successfully, state: {state}")
+        logger.info(f"units: {units}")
+        sys.exit(1)
+
+    # Stop qemu by sending Ctrl-A + x
+    logger.debug("stopping vm")
+    qemu.sendcontrol("A")
+    qemu.send("x")
+
+
 def main():
     args = arg_parser.parse_args()
     logger.info(args)
@@ -135,7 +176,7 @@ def main():
         efi_boot = prepare_efi_boot() if info.get("useEFI") else []
 
         qemu_net_opts = os.getenv("QEMU_NET_OPTS", "")
-        args = [
+        qemu_command = [
             "qemu-system-x86_64",
             "-machine", "type=q35,accel=kvm",
             "-cpu", "host",
@@ -149,39 +190,11 @@ def main():
             *efi_boot,
             "-drive", f"file={writable_image.name}"
         ]
-        logger.debug(" ".join(args))
-        qemu = pexpect.spawnu(" ".join(args))
-        logfile = open('log.txt', "w")
-        qemu.logfile = logfile
 
-        # qemu.expect_exact("Welcome to NixOS")
-        # logger.debug("reached welcome")
-
-        qemu.sendline()
-        qemu.expect(prompt)
-        logger.debug("found prompt, running systemctl status")
-
-        # Search the output of `systemctl status` for the "State" field
-        retries = 0
-        while retries < 10:
-            retries += 1
-            state = expect_systemctl_status(qemu)
-            if state != "starting":
-                break
-            time.sleep(1 * retries)
-
-        if state == "running":
-            logger.info("vm booted successfully")
+        if not args.interactive:
+            expect_booted(qemu_command)
         else:
-            units = logger.info(expect_shell(qemu, "systemctl|cat"))
-            logger.info(f"vm did not boot successfully, state: {state}")
-            logger.info(f"units: {units}")
-            sys.exit(1)
-
-        # Stop qemu by sending Ctrl-A + x
-        logger.debug("stopping vm")
-        qemu.sendcontrol("A")
-        qemu.send("x")
+            subprocess.run(qemu_command)
 
 
 if __name__ == '__main__':
