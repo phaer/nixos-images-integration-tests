@@ -118,7 +118,7 @@ def main():
             "-A", f"images.{args.image_name}")
         logger.info(f"built {stdout}")
 
-    suffix = f"{args.image_name}-{file_path}"
+    suffix = f"{args.image_name}-{file_path.name}"
     with NamedTemporaryFile(suffix=suffix) as writable_image:
         logger.info(f"Copying {readable_image} to {writable_image.name} to make it writable.")  # noqa
         shutil.copyfile(readable_image, writable_image.name)
