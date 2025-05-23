@@ -24,6 +24,12 @@
       systemd.services.openstack-init.enable = lib.mkForce false;
       systemd.services.amazon-init.enable = lib.mkForce false;
     };
+    image.modules.openstack-zfs = {
+      systemd.services.openstack-init.enable = lib.mkForce false;
+      systemd.services.amazon-init.enable = lib.mkForce false;
+    };
+
+
 
     # FIXME: wrong image names upstream
     # https://github.com/NixOS/nixpkgs/pull/409571
