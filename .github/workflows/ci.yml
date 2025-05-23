@@ -68,7 +68,7 @@ jobs:
 
     - name: Print test log
       if: always()
-      run: | cat log.txt
+      run: cat log.txt
 
     #- name: Upload
     #  uses: actions/upload-artifact@v4
