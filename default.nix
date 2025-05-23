@@ -29,6 +29,7 @@ let
     packages = [
       qemu
       python
+      pkgs.parallel
     ];
   };
 in
