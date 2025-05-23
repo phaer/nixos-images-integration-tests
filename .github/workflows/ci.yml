@@ -66,13 +66,9 @@ jobs:
         export check_boot="$(nix-build -A check-boot)"
         $check_boot ${{matrix.variants}}
 
-    - name: Upload test log
+    - name: Print test log
       if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{matrix.variants}}-log.txt
-        path: log.txt
-        if-no-files-found: ignore
+      run: | cat log.txt
 
     #- name: Upload
     #  uses: actions/upload-artifact@v4
