@@ -9,7 +9,7 @@
 mkdir -p logs
 nix-instantiate \
     --eval  --json --expr \
-    'builtins.filter (n: builtins.elem n (import ./ignore.nix)) (builtins.attrNames (import ./. {}).nixos.images)' \
+    'builtins.filter (n: !(builtins.elem n (import ./ignore.nix))) (builtins.attrNames (import ./. {}).nixos.images)' \
     | jq -cr '.[]' \
     | parallel  \
           --joblog ./logs/joblog \

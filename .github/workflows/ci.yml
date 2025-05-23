@@ -19,7 +19,7 @@ jobs:
     - id: get-variants
       name: Get Image variants
       run: |
-          variants="$(nix-instantiate --eval  --json --expr 'builtins.attrNames (import ./. {}).nixos.images' | jq '.[:2]')" # TODO test with just the first 2
+          variants="$(nix-instantiate --eval  --json --expr 'builtins.filter (n: !(builtins.elem n (import ./ignore.nix))) (builtins.attrNames (import ./. {}).nixos.images)')"
           echo "found $(echo $variants | jq 'length') image variants:"
           echo "variants=$(echo $variants | jq -cr '.')" | tee -a "$GITHUB_OUTPUT"
 
