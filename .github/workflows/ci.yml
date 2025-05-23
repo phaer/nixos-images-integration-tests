@@ -2,6 +2,8 @@ name: "nixos images"
 on:
   pull_request:
   push:
+    branches:
+      - master
 jobs:
   list-variants:
     runs-on: ubuntu-latest
