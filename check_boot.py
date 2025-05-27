@@ -6,11 +6,13 @@ import argparse
 import subprocess
 import json
 import shutil
+import gzip
 import time
 from tempfile import NamedTemporaryFile
 from pathlib import Path
 
 import pexpect
+import zstandard
 
 
 logger = logging.getLogger("run_qemu")
@@ -150,6 +152,23 @@ def expect_booted(qemu_command):
     qemu.send("x")
 
 
+def decompress_or_copy(source, target):
+    if source.suffix == ".zstd":
+        logger.info(f"Extracting {source} to {target}")  # noqa
+        with open(source, 'rb') as compressed:
+            dctx = zstandard.ZstdDecompressor()
+            with open(target, 'wb') as out:
+                dctx.copy_stream(compressed, out)
+    elif source.suffix == ".gz":
+        logger.info(f"Extracting {source} to {target}")  # noqa
+        with gzip.open(source, 'rb') as compressed:
+            with open(target, 'wb') as out:
+                shutil.copyfileobj(compressed, out)
+    else:
+        logger.info(f"Copying {source} to {target} to make it writable.")  # noqa
+        shutil.copyfile(source, target)
+
+
 def main():
     args = arg_parser.parse_args()
     logger.info(args)
@@ -168,10 +187,9 @@ def main():
         stdout = _nix_build(f"images.{args.image_name}")
         logger.info(f"built {stdout}")
 
-    suffix = f"{args.image_name}-{file_path.name}"
+    suffix = f"{args.image_name}-{file_path.name if len(file_path.suffixes) < 2 else file_path.stem}" # noqa
     with NamedTemporaryFile(suffix=suffix) as writable_image:
-        logger.info(f"Copying {readable_image} to {writable_image.name} to make it writable.")  # noqa
-        shutil.copyfile(readable_image, writable_image.name)
+        decompress_or_copy(readable_image, writable_image.name)
 
         efi_boot = prepare_efi_boot() if info.get("useEFI") else []
 
