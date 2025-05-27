@@ -6,11 +6,13 @@ import argparse
 import subprocess
 import json
 import shutil
+import gzip
 import time
 from tempfile import NamedTemporaryFile
 from pathlib import Path
 
 import pexpect
+import zstandard
 
 
 logger = logging.getLogger("run_qemu")
@@ -19,6 +21,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument("image_name")
+arg_parser.add_argument(
+    "--interactive",
+    help="start an interactive vm for debugging",
+    action="store_true")
 
 
 # Use nom-build if available, else nix-build
@@ -28,14 +34,25 @@ if not NIX_BUILD:
 logger.debug(f"Using {NIX_BUILD}")
 
 
-def _run(*args):
+def _nix_build(attr):
+    return _run(
+        NIX_BUILD, "-A", attr,
+        capture_output=False,
+        stdout=subprocess.PIPE,
+        # stdout should still go to the current stdout
+    )
+
+
+def _run(*args, **settings):
     logger.debug(f"executing: {" ".join(args)}")
+    kwargs = dict(
+        check=True,
+        encoding="utf-8",
+        capture_output=True)
+    kwargs.update(settings)
     try:
         return subprocess.run(
-            args,
-            check=True,
-            encoding="utf-8",
-            capture_output=True
+            args, **kwargs
         ).stdout.strip()
     except subprocess.CalledProcessError as e:
         logger.fatal(f"command failed: {e.stderr}")
@@ -62,7 +79,7 @@ def get_image_info(image_name):
 
 def prepare_efi_boot():
     logger.info("preparing efi boot")
-    ovmf_firmware = Path(_run(NIX_BUILD, "-A", "ovmf")) / "FV/OVMF_CODE.fd"
+    ovmf_firmware = Path(_nix_build("ovmf")) / "FV/OVMF_CODE.fd"
     efi_vars = Path(os.getenv("NIX_EFI_VARS", "nixos-efi-vars.fd"))
     if not efi_vars.exists():
         logger.debug(f"creating {efi_vars}")
@@ -98,6 +115,60 @@ def expect_systemctl_status(qemu):
     return state
 
 
+def expect_booted(qemu_command):
+    "spawn the qemu vm with pexpect, check systemctl status, shutdown"
+    logger.debug(" ".join(qemu_command))
+    qemu = pexpect.spawnu(" ".join(qemu_command))
+    logfile = open('log.txt', "w")
+    qemu.logfile = logfile
+
+    # qemu.expect_exact("Welcome to NixOS")
+    # logger.debug("reached welcome")
+
+    qemu.sendline()
+    qemu.expect(prompt)
+    logger.debug("found prompt, running systemctl status")
+
+    # Search the output of `systemctl status` for the "State" field
+    retries = 0
+    while retries < 10:
+        retries += 1
+        state = expect_systemctl_status(qemu)
+        if state != "starting":
+            break
+        time.sleep(1 * retries)
+
+    if state == "running":
+        logger.info("vm booted successfully")
+    else:
+        units = logger.info(expect_shell(qemu, "systemctl|cat"))
+        logger.info(f"vm did not boot successfully, state: {state}")
+        logger.info(f"units: {units}")
+        sys.exit(1)
+
+    # Stop qemu by sending Ctrl-A + x
+    logger.debug("stopping vm")
+    qemu.sendcontrol("A")
+    qemu.send("x")
+
+
+def decompress_or_copy(source, target):
+    if source.suffix == ".zstd":
+        logger.info(f"Extracting {source} to {target}")  # noqa
+        with open(source, 'rb') as compressed:
+            dctx = zstandard.ZstdDecompressor()
+            with open(target, 'wb') as out:
+                dctx.copy_stream(compressed, out)
+    elif source.suffix == ".gz":
+        logger.info(f"Extracting {source} to {target}")  # noqa
+        with gzip.open(source, 'rb') as compressed:
+            with open(target, 'wb') as out:
+                shutil.copyfileobj(compressed, out)
+    else:
+        logger.info(f"Copying {source} to {target} to make it writable.")  # noqa
+        shutil.copyfile(source, target)
+
+
 def main():
     args = arg_parser.parse_args()
     logger.info(args)
@@ -113,20 +184,17 @@ def main():
         logger.info(f"found {args.image_name} at {readable_image}.")
     else:
         logger.info(f"image {args.image_name} not found at {readable_image}, building...") # noqa
-        stdout = _run(
-            NIX_BUILD,
-            "-A", f"images.{args.image_name}")
+        stdout = _nix_build(f"images.{args.image_name}")
         logger.info(f"built {stdout}")
 
-    suffix = f"{args.image_name}-{file_path.name}"
+    suffix = f"{args.image_name}-{file_path.name if len(file_path.suffixes) < 2 else file_path.stem}" # noqa
     with NamedTemporaryFile(suffix=suffix) as writable_image:
-        logger.info(f"Copying {readable_image} to {writable_image.name} to make it writable.")  # noqa
-        shutil.copyfile(readable_image, writable_image.name)
+        decompress_or_copy(readable_image, writable_image.name)
 
         efi_boot = prepare_efi_boot() if info.get("useEFI") else []
 
         qemu_net_opts = os.getenv("QEMU_NET_OPTS", "")
-        args = [
+        qemu_command = [
             "qemu-system-x86_64",
             "-machine", "type=q35,accel=kvm",
             "-cpu", "host",
@@ -140,39 +208,11 @@ def main():
             *efi_boot,
             "-drive", f"file={writable_image.name}"
         ]
-        logger.debug(" ".join(args))
-        qemu = pexpect.spawnu(" ".join(args))
-        logfile = open('log.txt', "w")
-        qemu.logfile = logfile
 
-        # qemu.expect_exact("Welcome to NixOS")
-        # logger.debug("reached welcome")
-
-        qemu.sendline()
-        qemu.expect(prompt)
-        logger.debug("found prompt, running systemctl status")
-
-        # Search the output of `systemctl status` for the "State" field
-        retries = 0
-        while retries < 10:
-            retries += 1
-            state = expect_systemctl_status(qemu)
-            if state != "starting":
-                break
-            time.sleep(1 * retries)
-
-        if state == "running":
-            logger.info("vm booted successfully")
+        if not args.interactive:
+            expect_booted(qemu_command)
         else:
-            units = logger.info(expect_shell(qemu, "systemctl|cat"))
-            logger.info(f"vm did not boot successfully, state: {state}")
-            logger.info(f"units: {units}")
-            sys.exit(1)
-
-        # Stop qemu by sending Ctrl-A + x
-        logger.debug("stopping vm")
-        qemu.sendcontrol("A")
-        qemu.send("x")
+            subprocess.run(qemu_command)
 
 
 if __name__ == '__main__':

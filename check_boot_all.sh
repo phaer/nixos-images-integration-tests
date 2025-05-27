@@ -13,4 +13,4 @@ nix-instantiate \
     | jq -cr '.[]' \
     | parallel  \
           --joblog ./logs/joblog \
-          "python ./check_boot.py {} &> logs/{}.txt"
+          "python ./check_boot.py {} 2>&1 | tee logs/{}.txt"
