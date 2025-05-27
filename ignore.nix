@@ -7,11 +7,9 @@
   "iso-installer" # FIXME: iso,  hangs at "virtual console setup"
   "kexec" # compressed kexec tarball
   "proxmox"  # FIXME failing build, vm crashes during vma creating
-  "sd-card" # FIXME: compression
-  "linode" # FIXME: compression
-  "digital-ocean" # FIXME: compression
   "vagrant-virtualbox" # FIXME: ova, single file output
   "virtualbox" # FIXME: ova
+  "linode" # FIXME: linode uses direct boot, see e.g. https://www.linode.com/community/questions/24318/how-exactly-does-linode-boot-a-disk
   "openstack" # FIXME: reaches multi-user-target but no getty on serial
   "openstack-zfs" # FIXME: reaches multi-user-target but no getty on serial
 ]
