@@ -4,14 +4,14 @@
       "type": "Git",
       "repository": {
         "type": "GitHub",
-        "owner": "phaer",
+        "owner": "nixos",
         "repo": "nixpkgs"
       },
-      "branch": "amazon-image-extension",
+      "branch": "nixos-unstable",
       "submodules": false,
-      "revision": "2fa02a42fa6becde0eb75733882c96615eee71ef",
-      "url": "https://github.com/phaer/nixpkgs/archive/2fa02a42fa6becde0eb75733882c96615eee71ef.tar.gz",
-      "hash": "1rsa02s0lxzr8b2q7ql9mj78lr6rl2y9vxmsl6j65w2qlpqwfqj8"
+      "revision": "c87b95e25065c028d31a94f06a62927d18763fdf",
+      "url": "https://github.com/nixos/nixpkgs/archive/c87b95e25065c028d31a94f06a62927d18763fdf.tar.gz",
+      "hash": "0dr3sicmyizjflsykzgmymlxflqd0bs743i11bkymi157ln82bim"
     }
   },
   "version": 5

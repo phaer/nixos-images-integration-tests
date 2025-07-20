@@ -14,12 +14,13 @@ let
   inherit (nixos.config.system.build) images;
 
   ovmf = pkgs.OVMF.fd;
-  python = pkgs.python3.withPackages (ps: [ps.pexpect]);
+  pythonDeps = ps: [ps.pexpect ps.zstandard];
+  python = pkgs.python3.withPackages pythonDeps;
   qemu = pkgs.qemu;
   check-boot = pkgs.writers.writePython3
     "check_boot"
     {
-      libraries = [ pkgs.python3Packages.pexpect ];
+      libraries = pythonDeps pkgs.python3.pkgs;
       makeWrapperArgs = [ "--prefix" "PATH" ":" (pkgs.lib.makeBinPath [ qemu ]) ];
     }
     (builtins.readFile ./check_boot.py)

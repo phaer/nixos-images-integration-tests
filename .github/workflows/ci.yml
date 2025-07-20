@@ -50,6 +50,10 @@ jobs:
       env:
          variants: ${{ matrix.variants }}
       run: |
+        # images built by repart seem to require unprivileged user namespaces, which are blocked on ubuntu by default
+        sudo sysctl kernel.apparmor_restrict_unprivileged_userns || true
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
         nix-build -A images.$variants
         filePath=$(realpath result)/$(nix-instantiate --eval  --json --expr "(import ./. {}).nixos.images.$variants.passthru.filePath" | jq -r)
         echo "filePath=$filePath" | tee -a "$GITHUB_OUTPUT"
@@ -62,11 +66,15 @@ jobs:
         export check_boot="$(nix-build -A check-boot)"
         $check_boot ${{matrix.variants}}
 
-    - name: Upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.variants }}
-        path: ${{ steps.build-images.outputs.filePath }}
-        if-no-files-found: error
-        compression-level: 0
-        overwrite: true
+    - name: Print test log
+      if: always()
+      run: cat log.txt
+
+    #- name: Upload
+    #  uses: actions/upload-artifact@v4
+    #  with:
+    #    name: ${{ matrix.variants }}
+    #    path: ${{ steps.build-images.outputs.filePath }}
+    #    if-no-files-found: error
+    #    compression-level: 0
+    #    overwrite: true

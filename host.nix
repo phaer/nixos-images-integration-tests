@@ -18,6 +18,17 @@
       systemd.services.amazon-ssm-agent.enable = lib.mkForce false;
       systemd.services.fetch-ec2-metadata.enable = lib.mkForce false;
     };
+    image.modules.digital-ocean =
+      let services = [
+        "digitalocean-metadata"
+        "digitalocean-set-root-password"
+        "digitalocean-set-hostname"
+        "digitalocean-ssh-keys"
+        "digitalocean-entropy-seed"
+      ];
+      in {
+        systemd.services = lib.genAttrs services (name: { enable = lib.mkForce false; });
+    };
     image.modules.azure.systemd.services.consume-hypervisor-entropy.enable = lib.mkForce false;
     image.modules.oci.systemd.services.fetch-ssh-keys.enable = lib.mkForce false;
     image.modules.openstack = {
