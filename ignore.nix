@@ -1,11 +1,9 @@
 [
-  "google-compute"  # FIXME: eval error, google-guest-configs pkg "not valid". 4 years out of date upstream
-  "lxc-metadata" # compressed container tarball
+  "lxc-metadata" # covered by nixos/tests/lxc
+  "lxc" # covered by nixos/tests/lxc
+  "kexec" # covered by nixos/tests/kexec.nix
   "proxmox-lxc" # compressed container tarball
-  "lxc" # compressed container tarball
-  "iso" # FIXME: iso, "no bootable device"
-  "iso-installer" # FIXME: iso,  hangs at "virtual console setup"
-  "kexec" # compressed kexec tarball
+  "google-compute"  # FIXME: eval error, google-guest-configs pkg "not valid". 4 years out of date upstream
   "proxmox"  # FIXME failing build, vm crashes during vma creating
   "vagrant-virtualbox" # FIXME: ova, single file output
   "virtualbox" # FIXME: ova
