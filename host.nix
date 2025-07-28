@@ -40,15 +40,6 @@
       systemd.services.amazon-init.enable = lib.mkForce false;
     };
 
-
-
-    # FIXME: wrong image names upstream
-    # https://github.com/NixOS/nixpkgs/pull/409571
-    #image.modules.amazon.image.extension = lib.mkForce "vhd";
-    #image.modules.raw.image.extension = lib.mkForce "img";
-    #image.modules.raw-efi.image.extension = lib.mkForce "img";
-    #image.modules.sd-card = {config,...}: { image.filePath = lib.mkForce "sd-image/${config.image.fileName}"; };
-
     image.modules.repart-efi-gpt =
       {...}: {
             imports = [

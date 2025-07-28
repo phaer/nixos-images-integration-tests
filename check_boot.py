@@ -68,10 +68,10 @@ def get_image_info(image_name):
           image = (import ./. {{}}).nixos.images.{image_name};
           inherit (image.passthru) filePath config;
           inherit (config.boot.loader) systemd-boot grub;
-          useEFI = systemd-boot.enable || (grub.enable && grub.efiSupport);
+          bootEFI = systemd-boot.enable || (grub.enable && grub.efiSupport);
           storePath = image.outPath;
         in {{
-          inherit filePath useEFI storePath;
+          inherit filePath bootEFI storePath;
         }}
         """)
     return json.loads(stdout)
@@ -191,7 +191,8 @@ def main():
     with NamedTemporaryFile(suffix=suffix) as writable_image:
         decompress_or_copy(readable_image, writable_image.name)
 
-        efi_boot = prepare_efi_boot() if info.get("useEFI") else []
+        efi_boot = prepare_efi_boot() if info.get("bootEFI") else []
+        iso_boot = file_path.suffix == ".iso"
 
         qemu_net_opts = os.getenv("QEMU_NET_OPTS", "")
         qemu_command = [
@@ -205,9 +206,12 @@ def main():
             "-usb",
             "-device", "usb-tablet,bus=usb-bus.0",
             "-nographic",
-            *efi_boot,
-            "-drive", f"file={writable_image.name}"
+            *efi_boot
         ]
+        if not iso_boot:
+            qemu_command.extend(["-drive", f"file={writable_image.name}"])
+        else:
+            qemu_command.extend(["-cdrom", writable_image.name])
 
         if not args.interactive:
             expect_booted(qemu_command)
